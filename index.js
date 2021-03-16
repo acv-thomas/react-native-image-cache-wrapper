@@ -21,11 +21,14 @@ const SHA1 = require('crypto-js/sha1');
 
 const defaultImageTypes = ['png', 'jpeg', 'jpg', 'gif', 'bmp', 'tiff', 'tif'];
 
+const defaultRetry = {count: 3, interval: 100};
+
 export default class CachedImage extends Component {
 
     static defaultProps = {
         expiration: 86400 * 7, // default cache a week
         activityIndicator: null, // default not show an activity indicator
+        defaultRetry, // default prefetch retry
     };
 
     static cacheDir = RNFetchBlob.fs.dirs.CacheDir + "/CachedImage/";
@@ -73,8 +76,9 @@ export default class CachedImage extends Component {
      * @param url
      * @param success callback (width,height)=>{}
      * @param failure callback (error:string)=>{}
+     * @param retry object {count:number, interval:number}
      */
-    static getSize = (url: string, success: Function, failure: Function) => {
+    static getSize = (url: string, success: Function, failure: Function, retry: Object = defaultRetry) => {
 
         CachedImage.prefetch(url, 0,
             (cacheFile) => {
@@ -87,7 +91,7 @@ export default class CachedImage extends Component {
             },
             (error) => {
                 Image.getSize(url, success, failure);
-            });
+            }, retry);
 
     };
 
@@ -98,8 +102,9 @@ export default class CachedImage extends Component {
      * @param expiration if zero or not set, no expiration
      * @param success callback (cacheFile:string)=>{}
      * @param failure callback (error:string)=>{}
+     * @param retry object {count:number, interval:number}
      */
-    static prefetch = (url: string, expiration: number, success: Function, failure: Function) => {
+    static prefetch = (url: string, expiration: number, success: Function, failure: Function, retry: Object = defaultRetry) => {
 
         // source invalidate
         if (!url || url.toString() !== url) {
@@ -108,9 +113,25 @@ export default class CachedImage extends Component {
         }
 
         const cacheFile = _getCacheFilename(url);
-        if(CachedImage.sameURL.includes(cacheFile)){
 
-            success && success(cacheFile);
+        function checkCached(exists) {
+            if (exists) {
+                success && success(cacheFile);
+            } else {
+                if (retry.count > 0) {
+                    --retry.count;
+                    setTimeout(() => {
+                        CachedImage.prefetch(url, expiration, success, failure, retry);
+                    }, retry.interval);
+                } else {
+                    failure && failure("same url fetch timeout.");
+                }
+            }
+        }
+
+        if(CachedImage.sameURL.includes(cacheFile)) {
+            // Check to see if the cacheFile exists yet (download may be in progress).
+            CachedImage.isUrlCached(url, checkCached, failure);
             return
         }
         CachedImage.sameURL.push(cacheFile)
@@ -126,8 +147,6 @@ export default class CachedImage extends Component {
             })
             .catch((error) => {
                 // not exist
-                // success && success(cacheFile)
-                
                 _saveCacheFile(url, success, failure);
             });
     };
@@ -180,7 +199,7 @@ export default class CachedImage extends Component {
                         }, 0);
                         }
                         this._downloading = false;
-                    });
+                    }, this.props.retry);
             }
         } else {
             this.state.source = this.props.source;
