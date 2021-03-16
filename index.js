@@ -346,3 +346,4 @@ async function _saveCacheFile(url: string, success: Function, failure: Function)
   } catch (error) {
     failure && failure(error);
   }
+}
