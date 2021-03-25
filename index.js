@@ -280,9 +280,10 @@ function _getCacheFilename(url) {
 async function _saveCacheFile(url: string, success: Function, failure: Function) {
   try {
     const isNetwork = !!(url && url.match(/^https?:\/\//));
+    const isLocal = !!(url && url.match(/^file?:\/\//));
     const isBase64 = !!(url && url.match(/^data:/));
     const cacheFile = _getCacheFilename(url, isBase64);
-    if (isNetwork) {
+    if (isNetwork || isLocal) {
       const tempCacheFile = cacheFile + ".tmp";
       _unlinkFile(tempCacheFile);
       RNFetchBlob.config({
@@ -347,3 +348,4 @@ async function _saveCacheFile(url: string, success: Function, failure: Function)
     failure && failure(error);
   }
 }
+
